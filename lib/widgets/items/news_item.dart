@@ -65,20 +65,43 @@ class _NewsItemState extends State<NewsItem> {
           width: 3.0,
         ),
         boxShadow: isFocused
-            ? [BoxShadow(color: dominantColor, blurRadius: 25.0, spreadRadius: 10.0)]
+            ? [
+                BoxShadow(
+                    color: dominantColor, blurRadius: 25.0, spreadRadius: 10.0)
+              ]
             : [],
       ),
       child: widget.item.id == 'view_all'
           ? Container(
               color: Colors.grey[800],
               child: Center(
-                child: Text(
-                  'Go To',
-                  style: TextStyle(
-                    color: isFocused ? dominantColor : Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'VieW ALL',
+                      style: TextStyle(
+                        color: isFocused ? dominantColor : Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      _formatViewAllText(widget.item.name),
+                      style: TextStyle(
+                        color: isFocused ? dominantColor : Colors.white,
+                        fontSize: _calculateFontSize(widget.item.name),
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    Text(
+                      'Channel',
+                      style: TextStyle(
+                        color: isFocused ? dominantColor : Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  ],
                 ),
               ),
             )
@@ -88,6 +111,24 @@ class _NewsItemState extends State<NewsItem> {
               fit: BoxFit.cover,
             ),
     );
+  }
+
+  String _formatViewAllText(String text) {
+    List<String> words = text.split(' ');
+    if (words.length > 1) {
+      return words
+          .map((word) => word.trim())
+          .where((word) => word.isNotEmpty)
+          .join('\n');
+    }
+    return text;
+  }
+
+  double _calculateFontSize(String text) {
+    if (text.length <= 5) return 20;
+    if (text.length <= 10) return 18;
+    if (text.length <= 15) return 16;
+    return 14;
   }
 
   Widget _buildTextContent() {
@@ -111,7 +152,9 @@ class _NewsItemState extends State<NewsItem> {
             widget.item.description,
             style: TextStyle(
               fontSize: 12,
-              color: isFocused ? dominantColor.withOpacity(0.8) : Colors.white.withOpacity(0.8),
+              color: isFocused
+                  ? dominantColor.withOpacity(0.8)
+                  : Colors.white.withOpacity(0.8),
             ),
             textAlign: TextAlign.center,
             maxLines: 2,

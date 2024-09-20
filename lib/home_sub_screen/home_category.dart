@@ -7,14 +7,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:http/http.dart' as https;
 import 'package:keep_screen_on/keep_screen_on.dart';
+import 'package:palette_generator/palette_generator.dart';
 import 'package:video_player/video_player.dart';
-
 import '../main.dart';
 
-// Add a global variable for settings
+
+
+
 Map<String, dynamic> settings = {};
 
-// Function to fetch settings
 Future<void> fetchSettings() async {
   final response = await https.get(
     Uri.parse('https://api.ekomflix.com/android/getSettings'),
@@ -28,9 +29,7 @@ Future<void> fetchSettings() async {
   }
 }
 
-// Function to fetch categories with settings applied
 Future<List<Category>> fetchCategories() async {
-  // Fetch settings before fetching categories
   await fetchSettings();
 
   final response = await https.get(
@@ -44,7 +43,6 @@ Future<List<Category>> fetchCategories() async {
         jsonResponse.map((category) => Category.fromJson(category)).toList();
 
     if (settings['tvenableAll'] == 0) {
-      // Filter categories based on the settings
       for (var category in categories) {
         category.channels.retainWhere(
             (channel) => settings['channels'].contains(int.parse(channel.id)));
@@ -74,6 +72,7 @@ class _HomeCategoryState extends State<HomeCategory> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: cardColor,
       body: FutureBuilder<List<Category>>(
         future: _categories,
         builder: (context, snapshot) {
@@ -128,6 +127,7 @@ class Category {
 class Channel {
   final String id;
   final String name;
+  final String description;
   final String banner;
   final String genres;
   String url;
@@ -135,9 +135,10 @@ class Channel {
   String type;
   String status;
 
-  Channel({
+  Channel( {
     required this.id,
     required this.name,
+    required this.description,
     required this.banner,
     required this.genres,
     required this.url,
@@ -155,13 +156,13 @@ class Channel {
       url: json['url'] ?? '',
       streamType: json['stream_type'] ?? '',
       type: json['Type'] ?? '',
-      status: json['status'] ?? '',
+      status: json['status'] ?? '', 
+      description:json ['description']??'no description',
     );
   }
 }
 
 class CategoryWidget extends StatelessWidget {
-  bool _isNavigating = false;
   final Category category;
 
   CategoryWidget({required this.category});
@@ -192,7 +193,7 @@ class CategoryWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(left: 10),
+                  padding: const EdgeInsets.only(left: 10, top: 20, bottom: 10),
                   child: Text(
                     category.text.toUpperCase(),
                     style: TextStyle(
@@ -203,60 +204,39 @@ class CategoryWidget extends StatelessWidget {
                   ),
                 ),
                 SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.3,
+                  height: MediaQuery.of(context).size.height * 0.5,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    itemCount: filteredChannels.length,
+                    itemCount: filteredChannels.length > 5 ? 6 : filteredChannels.length,
                     itemBuilder: (context, index) {
-                      return ChannelWidget(
-                        channel: filteredChannels[index],
-                        onTap: () async {
-                          if (_isNavigating) return;
-                          _isNavigating = true;
-                          _showLoadingIndicator(context);
-
-                          try {
-                            if (filteredChannels[index].streamType ==
-                                'YoutubeLive') {
-                              final response = await https.get(
-                                Uri.parse(
-                                    'https://test.gigabitcdn.net/yt-dlp.php?v=' +
-                                        filteredChannels[index].url),
-                                headers: {'x-api-key': 'vLQTuPZUxktl5mVW'},
-                              );
-
-                              if (response.statusCode == 200 &&
-                                  json.decode(response.body)['url'] != '') {
-                                filteredChannels[index].url =
-                                    json.decode(response.body)['url'];
-                                filteredChannels[index].streamType = "M3u8";
-                              } else {
-                                throw Exception('Failed to load networks');
-                              }
-                            }
-                            Navigator.of(context, rootNavigator: true).pop();
-
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => VideoScreen(
-                                  channels: filteredChannels,
-                                  initialIndex: index,
-                                  // videoUrl: null,
-                                  // videoTitle: null,
+                      if (index == 5 && filteredChannels.length > 5) {
+                        return Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 10),
+                          child: ViewAllWidget(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => CategoryGridView(
+                                    category: category,
+                                    filteredChannels: filteredChannels,
+                                  ),
                                 ),
-                              ),
-                            ).then((_) {
-                              _isNavigating = false;
-                            });
-                          } catch (e) {
-                            _isNavigating = false;
-                            Navigator.of(context, rootNavigator: true).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Link Error')),
-                            );
-                          }
-                        },
+                              );
+                            },
+                            categoryText: category.text.toUpperCase(),
+                          ),
+                        );
+                      }
+                      return Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 10),
+                        child: ChannelWidget(
+                          channel: filteredChannels[index],
+                          onTap: () async {
+                            _showLoadingIndicator(context);
+                            await _playVideo(context, filteredChannels, index);
+                          },
+                        ),
                       );
                     },
                   ),
@@ -266,7 +246,43 @@ class CategoryWidget extends StatelessWidget {
           )
         : const SizedBox.shrink();
   }
+
+  Future<void> _playVideo(BuildContext context, List<Channel> channels, int index) async {
+    try {
+      if (channels[index].streamType == 'YoutubeLive') {
+        final response = await https.get(
+          Uri.parse('https://test.gigabitcdn.net/yt-dlp.php?v=' + channels[index].url),
+          headers: {'x-api-key': 'vLQTuPZUxktl5mVW'},
+        );
+
+        if (response.statusCode == 200 && json.decode(response.body)['url'] != '') {
+          channels[index].url = json.decode(response.body)['url'];
+          channels[index].streamType = "M3u8";
+        } else {
+          throw Exception('Failed to load networks');
+        }
+      }
+      Navigator.of(context, rootNavigator: true).pop();
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => VideoScreen(
+            channels: channels,
+            initialIndex: index,
+          ),
+        ),
+      );
+    } catch (e) {
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Link Error')),
+      );
+    }
+  }
 }
+
+
 
 class ChannelWidget extends StatefulWidget {
   final Channel channel;
@@ -280,92 +296,272 @@ class ChannelWidget extends StatefulWidget {
 
 class _ChannelWidgetState extends State<ChannelWidget> {
   bool isFocused = false;
+  Color focusColor = Colors.grey;
+
+  @override
+  void initState() {
+    super.initState();
+    _updateFocusColor();
+  }
+
+  Future<void> _updateFocusColor() async {
+    if (widget.channel.status == '1') {
+      final PaletteGenerator paletteGenerator = await PaletteGenerator.fromImageProvider(
+        CachedNetworkImageProvider(widget.channel.banner),
+        size: Size(150, 150),
+      );
+      setState(() {
+        focusColor = paletteGenerator.dominantColor?.color ?? Colors.grey;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     bool showBanner = widget.channel.status == '1';
 
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: Focus(
-        onFocusChange: (hasFocus) {
-          setState(() {
-            isFocused = hasFocus;
-          });
-        },
-        onKeyEvent: (node, event) {
-          if (event is KeyDownEvent &&
-              event.logicalKey == LogicalKeyboardKey.select) {
+    return FocusableActionDetector(
+      onFocusChange: (hasFocus) {
+        setState(() {
+          isFocused = hasFocus;
+        });
+      },
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (ActivateIntent intent) {
             widget.onTap();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
+            return null;
+          },
+        ),
+      },
+      child: GestureDetector(
+        onTap: widget.onTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisAlignment: MainAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (showBanner)
-              // Container(
-              // margin: const EdgeInsets.all(10),
-              // child:
               Stack(
                 children: [
                   AnimatedContainer(
-                    width: screenwdt * 0.16,
-                    height: isFocused ? screenhgt * 0.21 : screenhgt * 0.18,
-
+                    width: screenwdt * 0.18,
+                    height: isFocused ? screenhgt * 0.24 : screenhgt * 0.21,
                     duration: const Duration(milliseconds: 300),
                     decoration: BoxDecoration(
                       border: isFocused
                           ? Border.all(
-                              color: hintColor, // Use your outline color here
-                              width: 4.0, // Outline width
+                              color: focusColor,
+                              width: 4.0,
                             )
                           : Border.all(
-                              color: Colors
-                                  .transparent, // No outline when not focused
+                              color: Colors.transparent,
                               width: 4.0,
                             ),
                       borderRadius: BorderRadius.circular(0),
+                      boxShadow: isFocused
+                          ? [
+                              BoxShadow(
+                                color: focusColor.withOpacity(0.5),
+                                blurRadius: 25,
+                                spreadRadius: 10,
+                              )
+                            ]
+                          : [],
                     ),
-                    // child: ClipRRect(
-                    // borderRadius: BorderRadius.circular(5),
                     child: CachedNetworkImage(
                       imageUrl: widget.channel.banner,
                       fit: BoxFit.cover,
-                      placeholder: (context, url) =>
-                          Container(color: Colors.grey),
-                      width: screenwdt * 0.16,
-                      height: isFocused ? screenhgt * 0.21 : screenhgt * 0.18,
+                      placeholder: (context, url) => Container(color: Colors.grey),
+                      width: screenwdt * 0.18,
+                      height: isFocused ? screenhgt * 0.24 : screenhgt * 0.21,
                     ),
-                    // ),
                   ),
-                  Positioned(
-                      left: isFocused ? 5 : 0,
-                      right: isFocused ? 5 : 0,
-                      top: isFocused ? 5 : 0,
-                      bottom: isFocused ? 5 : 0,
-                      child: Container(
-                        color: Colors.black45,
-                      ))
                 ],
               ),
-            // ),
+            SizedBox(height: 10),
             Container(
-              width: screenwdt * 0.15,
+              width: screenwdt * 0.17,
+              child: Column(
+                children: [
+                  Text(
+                    widget.channel.name,
+                    style: TextStyle(
+                      color: isFocused ? focusColor : Colors.grey,
+                      fontWeight: FontWeight.bold,fontSize: 15,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                  ),
+                  Text(
+                    widget.channel.description,
+                    style: TextStyle(
+                      color: isFocused ? focusColor : Colors.grey,
+                      fontWeight: FontWeight.bold,
+                      // fontSize: 15,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ViewAllWidget extends StatefulWidget {
+  final VoidCallback onTap;
+  final String categoryText;
+
+  ViewAllWidget({required this.onTap, required this.categoryText});
+
+  @override
+  _ViewAllWidgetState createState() => _ViewAllWidgetState();
+}
+
+class _ViewAllWidgetState extends State<ViewAllWidget> {
+  bool isFocused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return FocusableActionDetector(
+      onFocusChange: (hasFocus) {
+        setState(() {
+          isFocused = hasFocus;
+        });
+      },
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (ActivateIntent intent) {
+            widget.onTap();
+            return null;
+          },
+        ),
+      },
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedContainer(
+              width: screenwdt * 0.18,
+              height: isFocused ? screenhgt * 0.24 : screenhgt * 0.21,
+              duration: const Duration(milliseconds: 300),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isFocused ? hintColor : Colors.transparent,
+                  width: 4.0,
+                ),
+                color: Colors.grey[800],
+                boxShadow: isFocused
+                    ? [
+                        BoxShadow(
+                          color: hintColor.withOpacity(0.5),
+                          blurRadius: 25,
+                          spreadRadius: 10,
+                        )
+                      ]
+                    : [],
+              ),
+              child: Center(
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text(
+                    widget.categoryText,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 3,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: 10),
+            Container(
+              width: screenwdt * 0.17,
               child: Text(
-                widget.channel.name,
+                "View All",
                 style: TextStyle(
                   color: isFocused ? borderColor : Colors.grey,
                   fontWeight: FontWeight.bold,
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
+                textAlign: TextAlign.center,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+
+
+class CategoryGridView extends StatelessWidget {
+  final Category category;
+  final List<Channel> filteredChannels;
+
+  CategoryGridView({required this.category, required this.filteredChannels});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: cardColor,
+      body: GridView.builder(
+        padding: EdgeInsets.all(20),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 5,
+          // childAspectRatio: 16 / 9,
+          // crossAxisSpacing: 10,
+          // mainAxisSpacing: 10,
+        ),
+        itemCount: filteredChannels.length,
+        itemBuilder: (context, index) {
+          return ChannelWidget(
+            channel: filteredChannels[index],
+            onTap: () async {
+              if (filteredChannels[index].streamType == 'YoutubeLive') {
+                final response = await https.get(
+                  Uri.parse('https://test.gigabitcdn.net/yt-dlp.php?v=' +
+                      filteredChannels[index].url),
+                  headers: {'x-api-key': 'vLQTuPZUxktl5mVW'},
+                );
+
+                if (response.statusCode == 200 &&
+                    json.decode(response.body)['url'] != '') {
+                  filteredChannels[index].url =
+                      json.decode(response.body)['url'];
+                  filteredChannels[index].streamType = "M3u8";
+                } else {
+                  throw Exception('Failed to load networks');
+                }
+              }
+
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => VideoScreen(
+                    channels: filteredChannels,
+                    initialIndex: index,
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -512,7 +708,7 @@ class _VideoScreenState extends State<VideoScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: cardColor,
       body: GestureDetector(
         onTap: _showControls,
         child: Center(

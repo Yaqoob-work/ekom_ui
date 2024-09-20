@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'package:ekom_ui/main.dart';
 import 'package:ekom_ui/menu/main_menu_three.dart';
+import 'package:ekom_ui/menu_two_items/Music_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as https;
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../home_sub_screen/banner_slider_screen.dart';
 import '../home_sub_screen/home_category.dart';
-import '../menu/main_menu_two.dart';
 
 void main() {
   runApp(HomeScreen());
@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     // Simulate network request delay
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(const Duration(seconds: 1));
 
     try {
       final response = await https.get(
@@ -103,8 +103,8 @@ class _HomeScreenState extends State<HomeScreen> {
               Container(
                 color: cardColor,
                 child: SizedBox(
-                  height: screenhgt * 0.5,
-                  child: MainMenuTwo(),
+                  height: screenhgt * 0.6,
+                  child: MusicScreen(),
                 ),
               ),
               Container(
